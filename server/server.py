@@ -34,7 +34,7 @@ class Server:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='gis-map-server description:')
+    parser = argparse.ArgumentParser(description='sft-protocol-server description:')
     parser.add_argument('address', type=str,
                 help='a required string positional argument, ip-adress of server')
     parser.add_argument('port', type=int,
