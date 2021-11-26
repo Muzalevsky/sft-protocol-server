@@ -3,7 +3,8 @@ import time
 import os
 import logging
 import subprocess
-from utils import Order_Status
+
+from .utils import Order_Status
 
 
 class Worker():
@@ -42,6 +43,7 @@ class Worker():
 
 class Scheduler():
     def __init__(self):
+        self._logger = logging.getLogger(self.__class__.__name__)
         # list of all orders
         self.orders = dict()
         # queue only with new ids
@@ -52,7 +54,7 @@ class Scheduler():
         params_list = ['lat', 'lon', 'scale', 'w', 'h', 'format']
         for par in params_list:
             if par not in params:
-                logging.debug(f'Bad params = {params}')
+                self._logger.debug(f'Bad params = {params}')
                 return False
         return True
 
@@ -66,17 +68,16 @@ class Scheduler():
         # check if id exists
         if id in self.orders:
             return True
-        else:
-            return False
+        return False
 
     def start_scheduler(self, pipe_conn, host, port, slots_num):
-        logging.debug('start')
+        self._logger.debug('start')
         try:
             service_path = os.environ['SFT_ROOT']
             util_path = service_path + 'sbin/worker'
-            logging.debug(f'Worker path ={util_path}')
+            self._logger.debug(f'Worker path ={util_path}')
         except Exception as exc:
-            logging.debug('Could not find SFT_ROOT')
+            self._logger.debug('Could not find SFT_ROOT')
 
         worker = Worker(slots_num)
 
@@ -84,11 +85,11 @@ class Scheduler():
             # checking new data in Pipe
             if pipe_conn.poll():
                 data = pipe_conn.recv()
-                logging.debug(f'Scheduler got: {data}')
+                self._logger.debug(f'Scheduler got: {data}')
 
                 if data[0] == 0:
                     # request for new order
-                    logging.debug(f'Scheduler new order {data[1]}')
+                    self._logger.debug(f'Scheduler new order {data[1]}')
                     code = 0
                     protocolId = 0
 
@@ -99,12 +100,12 @@ class Scheduler():
                     pipe_conn.send((protocolId, code))
                 else:
                     # request to check order
-                    logging.debug(f'Scheduler checking order id={data[1]}')
+                    self._logger.debug(f'Scheduler checking order id={data[1]}')
                     if self.check_order(data[1]):
-                        logging.debug(f'Status: {self.orders[data[1]][1]}')
+                        self._logger.debug(f'Status: {self.orders[data[1]][1]}')
                         pipe_conn.send(self.orders[data[1]][1])
                     else:
-                        logging.debug(f'No order in scheduler with ID {data[1]}')
+                        self._logger.debug(f'No order in scheduler with ID {data[1]}')
                         pipe_conn.send(Order_Status.UNKNOWN)
                 continue
             else:
@@ -118,14 +119,14 @@ class Scheduler():
                 # if current_order == False:
                 if self.queue:
                     current_protocol_id = self.queue.pop(0)
-                    logging.debug(f'Current protocol id {current_protocol_id}')
+                    self._logger.debug(f'Current protocol id {current_protocol_id}')
                     params = self.orders[current_protocol_id][0]
-                    logging.debug(f'{params}')
+                    self._logger.debug(f'{params}')
                     child = subprocess.Popen([util_path, f'-uhttp://{host}:{port}', f'-o{current_protocol_id}',f"-x{params['lon'][0]}", f"-y{params['lat'][0]}",
                                               f"-s{params['scale'][0]}", f"-w{params['w'][0]}", f"-h{params['h'][0]}", f"-f{params['format'][0]}"])
 
                     worker.fill_slot((current_protocol_id, child))
-                    logging.debug('popen')
+                    self._logger.debug('popen')
 
             # if some slots are busy
             # checking if order is ready
@@ -133,7 +134,7 @@ class Scheduler():
                 # if child.poll() != None:
                 for slot, id in worker.active_slots():
                     if slot[1].poll() is not None:
-                        logging.debug(f'Scheduler detects process as ready, return code: {slot[1].returncode}')
+                        self._logger.debug(f'Scheduler detects process as ready, return code: {slot[1].returncode}')
                         if slot[1].returncode == 0:
                             self.orders[slot[0]][1] = Order_Status.READY
                         else:

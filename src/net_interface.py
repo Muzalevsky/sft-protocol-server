@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -u
 import http.server
 import logging
-import sys
 from urllib.parse import parse_qs
-from utils import Order_Status, get_log_path
+
+from .utils import Order_Status
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -101,21 +101,13 @@ class Net_Interface():
     def __init__(self, host, port):
         self.port = port
         self.host = host
-        self.init_logging()
 
-    def init_logging(self):
-        log_path = get_log_path()
-        if log_path is None:
-            logging.debug("Could not find SFT_ROOT environment variable")
-            sys.exit(1)
-
-        log_path += '/server.log'
-        logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', filename=log_path, encoding='utf-8', level=logging.DEBUG)
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def start_server(self, pipe_conn, buffer):
         def handler(*args):
             Handler(pipe_conn, buffer, *args)
 
         self.net_server = http.server.HTTPServer((self.host, self.port), handler)
-        logging.debug('net_server Started')
+        self._logger.debug('net_server Started')
         self.net_server.serve_forever()
