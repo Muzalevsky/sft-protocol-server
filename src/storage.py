@@ -8,13 +8,11 @@ class Storage():
         # parse content
         return True
 
-    def push(self, id, data, img_format):
+    def push(self, id, data):
         if id in self.storage:
             return False
-        self.storage[id] = (data, img_format)
+        self.storage[id] = data
         return True
 
     def pop_by_id(self, id):
-        # if id in self.storage:
-        #     return False
         return self.storage.pop(id)

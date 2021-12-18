@@ -3,27 +3,25 @@ import http.server
 import logging
 from urllib.parse import parse_qs
 
-from .utils import Order_Status
-
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    def __init__(self, pipe_conn, buffer, *args):
-        self.pipe_conn = pipe_conn
+    def __init__(self, buffer, *args):
         self.buffer = buffer
+        self._logger = logging.getLogger()
         http.server.BaseHTTPRequestHandler.__init__(self, *args)
 
     def do_POST(self):
         try:
             # trying to get payload
-            logging.debug('Got POST-request')
+            self._logger.debug('Got POST-request')
             length = int(self.headers['Content-Length'])
-            logging.debug('Got length')
-            orderId = int(self.headers['protocolId'])
-            logging.debug('Got protocolId')
+            self._logger.debug('Got length')
+            protocolId = int(self.headers['protocolId'])
+            self._logger.debug(f"Got protocolId={protocolId}")
             payload = self.rfile.read(length)
-            logging.debug('Got payload')
-            self.buffer.push(orderId, payload)
-            logging.debug('Got push')
+            self._logger.debug('Got payload')
+            self.buffer.push(protocolId, payload)
+            self._logger.debug('Got push')
             self.send_response(200, "Got payload")
             self.end_headers()
             self.wfile.write('Accepted'.encode())
@@ -32,7 +30,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 self.bad_request(400, exc)
             except Exception as exc:
-                logging.debug(f"Bad connection with client {exc}")
+                self._logger.debug(f"Bad connection with client {exc}")
 
     def bad_request(self, code, exc=""):
         self.send_response(code)
@@ -41,72 +39,46 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write('<html><head><meta charset="utf-8">'.encode())
         self.wfile.write('<title>Simple title</title></head>'.encode())
         self.wfile.write(f'<body><p>Bad request: {code} {exc}</p></body></html>'.encode())
-        logging.debug('requested')
-
-    def clear_pipe(self):
-        while True:
-            logging.debug('clear pipe start')
-            if self.pipe_conn.poll():
-                self.pipe_conn.recv()
-                continue
-            logging.debug('clear pipe finish')
-            break
+        self._logger.debug('requested')
 
     def do_GET(self):
         try:
-            #analyzing agent
             try:
                 if 'friction_tester' in dict(self.headers)['agent']:
-                    logging.debug('Agent: friction_tester')
+                    self._logger.debug('Agent: friction_tester')
                     friction_tester_agent = True
             except:
-                logging.debug('Agent: Browser')
+                self._logger.debug('Agent: Browser')
                 friction_tester_agent = False
 
             # analyzing of parameters
             fields = parse_qs(self.path)
-            logging.debug(f"I've got a GET request, fields = {fields}")
+            self._logger.debug(f"I've got a GET request, fields = {fields}")
 
             if 'protocolId' in fields:
                 # asking scheduler about status of order
                 protocolId = int(fields['protocolId'][0])
-                self.clear_pipe()
-                self.pipe_conn.send((1, protocolId))
-
-                # obtaining id from scheduler
-                if self.pipe_conn.poll(2):
-                    status = self.pipe_conn.recv()
-                    if status == Order_Status.READY:
-                        output_data, img_format = self.buffer.pop_by_id(protocolId)
-                        self.send_response(200)
-                        self.send_header("Content-type", "text/html")
-                        self.end_headers()
-                        self.wfile.write(output_data)
-                    elif status == Order_Status.ERROR:
-                        self.bad_request(500)
-                    elif status == Order_Status.UNKNOWN:
-                        self.bad_request(400)
-                    else:
-                        logging.debug('return 202')
-                        self.bad_request(202)
-                else:
-                    self.bad_request(408)
-
+                output_data = self.buffer.pop_by_id(protocolId)
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                self.wfile.write(output_data)
+            else:
+                self.bad_request(408)
         except Exception as exc:
-            logging.debug("Error! {0}".format(exc))
+            self._logger.debug("Error! {0}".format(exc))
             self.bad_request(520, exc)
 
 
-class Net_Interface():
+class Net_Interface:
     def __init__(self, host, port):
         self.port = port
         self.host = host
-
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def start_server(self, pipe_conn, buffer):
+    def start_server(self, buffer):
         def handler(*args):
-            Handler(pipe_conn, buffer, *args)
+            Handler(buffer, *args)
 
         self.net_server = http.server.HTTPServer((self.host, self.port), handler)
         self._logger.debug('net_server Started')
